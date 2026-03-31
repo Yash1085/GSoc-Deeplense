@@ -1,68 +1,66 @@
-# 🔭 GSoC 2026: ML4SCI DeepLense — Gravitational Lens Finding
+# 🔭 DeepLense: Gravitational Lens Finding
 
-[![Organization](https://img.shields.io/badge/Organization-ML4SCI-blue.svg)](https://ml4sci.org/)
-[![Project](https://img.shields.io/badge/Project-DeepLense-purple.svg)](https://ml4sci.org/deeplense/)
-[![Framework](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?logo=PyTorch&logoColor=white)](#)
+This repository contains my evaluation task submissions for the **ML4SCI / DeepLense** organization for **Google Summer of Code (GSoC) 2026**. The primary focus of this project is the detection and classification of strong gravitational lenses using Deep Learning.
 
-This repository contains the solution and complete data pipeline for **Specific Test V: Lens Finding & Data Pipelines**, submitted as part of the Google Summer of Code (GSoC) 2026 evaluation phase for the DeepLense project.
+## 📁 Repository Structure
 
-**Author:** Yash Yadav  
-**Kaggle Profile:** [Yash2072005](https://www.kaggle.com/yash2072005)  
-**LinkedIn:** [yash-yadav007](https://www.linkedin.com/in/yash-yadav007/)
+* `Common_Task.ipynb` / `common_task.py`: Solution for the mandatory DeepLense common evaluation task.
+* `Specific_Test_V_Lens_Finding.ipynb`: Full training, validation, and inference pipeline for **Specific Test V (Lens Finding & Data Pipelines)**.
+* `requirements.txt`: Python dependencies required to run the notebooks.
 
 ---
 
-## 📑 Project Overview
+## 🚀 Specific Test V: Lens Finding & Data Pipelines
 
-The objective of this task is to develop a robust binary classification model capable of distinguishing strong gravitational lenses from non-lensed galaxies using 3-channel (multi-filter) $64 \times 64$ observational images. 
+### Task Overview
+The objective is to build a robust binary classification model to distinguish lensed galaxies from non-lensed galaxies using 3-channel (multi-filter) 64x64 observational images.
 
-The primary challenge of this dataset is the **extreme class imbalance**, mirroring real-world wide-field surveys (e.g., HSC-SSP):
-* **Training Set Imbalance:** 1 : 16.6 (Lenses to Non-lenses)
-* **Test Set Imbalance:** 1 : 100 (Lenses to Non-lenses)
+**The core challenge:** Extreme class imbalance. 
+* **Training Set:** 1,730 lenses vs. 28,675 non-lenses (~1:16 ratio)
+* **Test Set:** 195 lenses vs. 19,455 non-lenses (~1:100 ratio)
 
-Because standard ROC-AUC becomes highly insensitive to False Positives under severe imbalance, this pipeline is strictly optimized and evaluated using **PR-AUC (Precision-Recall AUC)** and **TPR @ 1% FPR**.
+### Methodology & Architecture
 
----
+To tackle the physical constraints and the severe class imbalance, the pipeline utilizes the following strategies:
 
-## 🧠 Methodology & Engineering Highlights
+1.  **Model Architecture (EfficientNet-B0):** Instead of a shallow custom CNN, I utilized a pretrained `EfficientNet-B0` backbone. To preserve the morphological features of the lenses (arcs, Einstein rings) and match the network's expected receptive field, images are upscaled to 128x128 during the transform pipeline.
+2.  **Handling Imbalance (Focal Loss):**
+    Standard Cross-Entropy fails at a 1:100 test imbalance. The model is trained using **Focal Loss** to dynamically down-weight easy negative examples (obvious non-lenses) and heavily penalize missed lenses. 
+    
+    $$FL(p_t) = -\alpha_t (1 - p_t)^\gamma \log(p_t)$$
+    
+    *Configuration: $\alpha = 0.95$ (heavily weighting the positive class) and $\gamma = 2.0$.*
+3.  **Physical Symmetry Augmentations:**
+    Astronomical images exhibit $D_4$ symmetry (no preferred "up" or "down" in space). The dataset is augmented using exact 90-degree rotations and flips to synthetically expand the rare lens class without interpolative blurring.
+4.  **Robust Evaluation (5-Fold Stratified CV):**
+    To prevent high variance from a single validation split, the pipeline utilizes 5-Fold Stratified Cross-Validation, ensuring stable out-of-fold (OOF) threshold tuning and evaluation.
+5.  **Test-Time Augmentation (TTA):**
+    At inference, the ensemble averages predictions over 8 deterministic physical states (4 rotations x 2 flips) to reduce predictive variance on borderline cases.
 
-To combat domain-specific challenges, the following advanced machine learning techniques were implemented:
-
-### 1. Mathematical Imbalance Handling
-* **Macro-Balancing:** Implemented PyTorch's `WeightedRandomSampler` to ensure the model sees a balanced 1:1 ratio during batch generation.
-* **Micro-Hard Example Mining:** Engineered a **Custom Alpha-Stripped Focal Loss**. By removing the $\alpha$ weighting parameter (since the batch is already macro-balanced by the sampler) and keeping the $\gamma$ parameter, the gradients are forced to focus strictly on the faintest, most difficult Einstein rings without double-penalizing the majority class.
-
-### 2. Physics-Aware Modeling
-* **Primary Backbone (EfficientNet-B0):** Utilized for its optimal compound scaling and native Squeeze-and-Excitation (SE) blocks, which dynamically recalibrate channel-wise features to focus on extended lensing arcs.
-* **Continuous $SO(2)$ Equivariance ($C_8$-ENN):** Implemented a baseline Equivariant Neural Network using the `escnn` library (`gspaces.rot2dOnR2(N=8)`). Unlike standard CNNs that rely on dataset bloat via geometric augmentations, this model has the continuous rotational symmetry of Einstein rings structurally baked into its filters.
-
-### 3. Rigorous Validation & Inference
-* **5-Fold Stratified Cross-Validation:** Ensured model stability and generated reliable Out-Of-Fold (OOF) metrics.
-* **Max-Pooled Test-Time Augmentation (TTA):** Deployed a 5-pass TTA using `np.max` aggregation rather than the mean. This preserves anomaly signals (faint lenses) that might only be highly visible in specific orientations.
-* **Ensemble Inference:** Final test predictions are generated via an ensemble average of the 5-Fold models.
-
-### 4. Interpretability
-* **Grad-CAM:** Applied Gradient-weighted Class Activation Mapping to True Positives, False Positives, and False Negatives to visually prove the network is focusing on morphological lensing features (arcs/rings) rather than central deflector artifacts.
-
----
-
-## 📊 Results Summary
-
-*(Note: Replace with your exact final metric outputs from the notebook)*
-
-| Model Pipeline | ROC-AUC | PR-AUC | TPR @ 1% FPR |
-| :--- | :---: | :---: | :---: |
-| **EfficientNet-B0 (5-Fold Ensemble + TTA)** | `0.99xx` | `0.9xxx` | `0.9xxx` |
-| **$C_8$ Equivariant Neural Network Baseline** | `0.9xxx` | `0.8xxx` | `0.8xxx` |
+### Evaluation Metrics
+Because accuracy is a misleading metric for imbalanced data, this model is evaluated primarily on its ranking and precision-recall capabilities:
+* **ROC-AUC** (Receiver Operating Characteristic - Area Under Curve)
+* **PR-AUC** (Precision-Recall Area Under Curve)
 
 ---
 
-## ⚙️ Reproducibility & Installation
+## ⚙️ How to Run
 
-The entire pipeline is contained within a single, modular Jupyter Notebook (`gsoc-deeplense-test5-final.ipynb`) designed to run on Kaggle or a local GPU environment.
+1. **Clone the repository:**
+   ```bash
+   git clone [https://github.com/yourusername/DeepLense-GSoC-2026.git](https://github.com/yourusername/DeepLense-GSoC-2026.git)
+   cd DeepLense-GSoC-2026
+   ```
 
-**Dependencies:**
-```bash
-pip install torch torchvision numpy pandas scikit-learn matplotlib tqdm
-pip install escnn        # For the C8 Equivariant Neural Network
-pip install grad-cam     # For Interpretability visualizations
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Data Setup:**
+   * Download the dataset provided in the DeepLense task description.
+   * Extract the files and update the `BASE_PATH` variable in the configuration block of `Specific_Test_V_Lens_Finding.ipynb` to point to your local directories (`train_lenses`, `train_nonlenses`, etc.).
+
+4. **Execution:**
+   * The notebook is structured to run end-to-end. 
+   * *Note for Kaggle/Colab users:* If you experience multiprocessing `AssertionError` crashes during data loading, ensure `NUM_WORKERS = 0` is set in the configuration block.
