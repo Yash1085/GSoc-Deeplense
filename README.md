@@ -1,4 +1,3 @@
-# GSoc-Deeplense
 # 🔭 GSoC 2026: ML4SCI DeepLense — Gravitational Lens Finding
 
 [![Organization](https://img.shields.io/badge/Organization-ML4SCI-blue.svg)](https://ml4sci.org/)
